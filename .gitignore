@@ -1,0 +1,20 @@
+# Archivos de configuración local y secretos (prohibidos en el repo)
+.env
+*.env.local
+
+# Backups y volcados pesados de base de datos
+*.dump
+*.tar
+*.gz
+*.sql.gz
+
+# Archivos del sistema y de VS Code
+.vscode/
+Thumbs.db
+Desktop.ini
+
+# Python / Entornos virtuales (útil para la Etapa 3)
+__pycache__/
+*.py[cod]
+venv/
+.env/
