@@ -18,3 +18,8 @@ __pycache__/
 *.py[cod]
 venv/
 .env/
+# El dump comprimido de la carga masiva sí se versiona (entregable de la Etapa 3)
+!db/seed/dump_completo.sql.gz
+# Dumps sin comprimir: no se versionan
+*.sql.dump
+dump_completo.sql
