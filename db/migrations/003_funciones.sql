@@ -60,13 +60,39 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- ---------------------------------------------------------------------
--- 4. fn_total_comprobante
--- Propósito: Calcula los importes derivados de un comprobante sumando sus
---            renglones y aplicando el descuento del cliente.
+-- 4. fn_subtotal_renglon
+-- Propósito: Importe neto de un renglón de venta:
+--            cantidad × precio_unitario × (1 − descuento_pct / 100), a 2 decimales.
+-- Parámetros: p_cantidad, p_precio_unitario, p_descuento_pct.
+-- Regla de negocio: RN-08. Es la ÚNICA fórmula del subtotal de un renglón;
+--            la usan el trigger de renglón y la consulta de control de la carga.
+-- Volatilidad: IMMUTABLE (solo depende de sus argumentos).
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_subtotal_renglon(
+    p_cantidad        INTEGER,
+    p_precio_unitario NUMERIC,
+    p_descuento_pct   NUMERIC
+)
+RETURNS NUMERIC(14,2)
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT ROUND(p_cantidad * p_precio_unitario * (1 - p_descuento_pct / 100.0), 2);
+$$;
+
+-- ---------------------------------------------------------------------
+-- 5. fn_total_comprobante
+-- Propósito: Calcula los importes derivados de un comprobante a partir de
+--            sus renglones.
+--              subtotal  = Σ cantidad × precio_unitario        (bruto)
+--              total     = Σ subtotal de cada renglón           (neto)
+--              descuento = subtotal − total
+--            Usa el precio y el descuento GUARDADOS EN EL RENGLÓN (valores
+--            históricos del momento de la venta), no los actuales del vino o
+--            del cliente: así, un cambio de precio (RN-13) o de descuento
+--            (consigna U6) no altera ventas ya emitidas.
 -- Parámetros: p_nro_comprobante (INTEGER).
--- Retorna: TABLE (subtotal NUMERIC, descuento NUMERIC, total NUMERIC).
+-- Retorna: TABLE (subtotal, descuento, total).
 -- Regla de negocio: RN-08.
--- Volatilidad: STABLE (lee las tablas comprobante, cliente y renglon_comprobante).
+-- Volatilidad: STABLE (lee renglon_comprobante).
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_total_comprobante(p_nro_comprobante INTEGER)
 RETURNS TABLE (
@@ -74,33 +100,10 @@ RETURNS TABLE (
     descuento NUMERIC(14,2),
     total     NUMERIC(14,2)
 )
-LANGUAGE plpgsql STABLE AS $$
-DECLARE
-    v_pct_descuento NUMERIC(5,2);
-    v_subtotal      NUMERIC(14,2);
-    v_descuento     NUMERIC(14,2);
-    v_total         NUMERIC(14,2);
-BEGIN
-    -- Obtener el porcentaje de descuento asignado al cliente del comprobante
-    SELECT c.descuento INTO v_pct_descuento
-    FROM comprobante comp
-    JOIN cliente c ON c.id_cliente = comp.id_cliente
-    WHERE comp.nro = p_nro_comprobante;
-
-    IF NOT FOUND THEN
-        v_pct_descuento := 0;
-    END IF;
-
-    -- Calcular la suma de subtotales brutos de los renglones
-    SELECT COALESCE(SUM(rc.cantidad * rc.precio_unitario), 0)
-    INTO v_subtotal
-    FROM renglon_comprobante rc
-    WHERE rc.nro = p_nro_comprobante;
-
-    -- Calcular el monto de descuento y el neto final
-    v_descuento := ROUND(v_subtotal * (v_pct_descuento / 100.0), 2);
-    v_total     := v_subtotal - v_descuento;
-
-    RETURN QUERY SELECT v_subtotal, v_descuento, v_total;
-END;
+LANGUAGE sql STABLE AS $$
+    SELECT bruto, bruto - neto, neto
+      FROM (SELECT COALESCE(SUM(rc.cantidad * rc.precio_unitario), 0)::NUMERIC(14,2) AS bruto,
+                   COALESCE(SUM(rc.subtotal), 0)::NUMERIC(14,2)                      AS neto
+              FROM renglon_comprobante rc
+             WHERE rc.nro = p_nro_comprobante) t;
 $$;

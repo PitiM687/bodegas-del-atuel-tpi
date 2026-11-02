@@ -30,7 +30,7 @@ GROUP BY v.cod_vino, v.nombre, v.tipo, v.anada, v.precio, sd.cantidad;
 CREATE OR REPLACE VIEW vw_ventas_mensuales_sala AS
 SELECT 
     s.id_sala,
-    ('Sala ' || s.numero::text) AS sala_venta,
+    ('Sala ' || s.id_sala || ' (' || s.calle || ' ' || s.numero || ')') AS sala_venta,
     EXTRACT(YEAR FROM c.fecha)::INTEGER AS anio,
     EXTRACT(MONTH FROM c.fecha)::INTEGER AS mes,
     COUNT(c.nro) AS cantidad_comprobantes,
@@ -39,7 +39,7 @@ SELECT
     SUM(c.total) AS total_facturado
 FROM sala_venta s
 JOIN comprobante c ON s.id_sala = c.id_sala
-GROUP BY s.id_sala, s.numero, EXTRACT(YEAR FROM c.fecha), EXTRACT(MONTH FROM c.fecha);
+GROUP BY s.id_sala, s.calle, s.numero, EXTRACT(YEAR FROM c.fecha), EXTRACT(MONTH FROM c.fecha);
 
 -- ---------------------------------------------------------------------
 -- 3. vw_documentos_pendientes
@@ -65,7 +65,7 @@ SELECT
     t.fecha_confeccion AS fecha,
     t.estado,
     (CURRENT_DATE - t.fecha_confeccion) AS dias_antiguedad,
-    ('Sala ' || s.numero::text) AS entidad_asociada
+    ('Sala ' || s.id_sala || ' (' || s.calle || ' ' || s.numero || ')') AS entidad_asociada
 FROM transferencia t
 JOIN sala_venta s ON t.id_sala = s.id_sala
 WHERE t.estado <> 'procesado';

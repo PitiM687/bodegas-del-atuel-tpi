@@ -92,7 +92,10 @@ ALTER TABLE permiso_exportacion
 -- RN-08 / RN-15: importes y cantidades de la venta.
 ALTER TABLE comprobante
     ADD CONSTRAINT ck_comprobante_importes
-        CHECK (subtotal >= 0 AND descuento >= 0 AND total >= 0);
+        CHECK (subtotal >= 0 AND descuento >= 0 AND total >= 0),
+    -- CHECK entre columnas: la cabecera es internamente coherente.
+    ADD CONSTRAINT ck_comprobante_total
+        CHECK (total = subtotal - descuento);
 ALTER TABLE renglon_comprobante
     ADD CONSTRAINT ck_renglon_cant        CHECK (cantidad > 0),
     ADD CONSTRAINT ck_renglon_precio      CHECK (precio_unitario > 0),
