@@ -1,0 +1,71 @@
+# =====================================================================
+# docker-compose.yml · Bodegas del Atuel
+#
+#   docker compose up -d                 -> base de datos con las migraciones 001..008
+#   docker compose --profile seed run --rm seed
+#                                        -> carga masiva (150.000 comprobantes, ~1 min)
+#   docker compose exec db psql -U postgres -d bodegas_atuel -f /tests/db_tests.sql
+#                                        -> pruebas de las reglas (92 casos)
+#   docker compose down -v               -> borra contenedores Y datos (vuelve a cero)
+#
+# Las contraseñas se leen del archivo .env (copiar .env.example). Nunca van
+# en este archivo ni en el repositorio.
+# En la Etapa 6 se agrega el servicio de la API y en la 7, el del front.
+# =====================================================================
+name: bodegas-atuel
+
+services:
+  db:
+    image: postgres:18
+    container_name: bodegas_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bodegas_atuel
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PGPASSWORD:?Definí PGPASSWORD en el archivo .env}
+      # Contraseñas de los roles: las usa docker/db/init/01_migraciones.sh
+      PG_PROPIETARIO_PASSWORD: ${PG_PROPIETARIO_PASSWORD:?Definí PG_PROPIETARIO_PASSWORD en el archivo .env}
+      PG_APP_RW_PASSWORD: ${PG_APP_RW_PASSWORD:?Definí PG_APP_RW_PASSWORD en el archivo .env}
+      PG_SOLO_LECTURA_PASSWORD: ${PG_SOLO_LECTURA_PASSWORD:?Definí PG_SOLO_LECTURA_PASSWORD en el archivo .env}
+      # CURRENT_DATE en hora argentina (las consultas usan "última semana", etc.)
+      TZ: America/Argentina/Buenos_Aires
+      PGTZ: America/Argentina/Buenos_Aires
+    ports:
+      # Si ya tenés PostgreSQL instalado en el puerto 5432, poné DB_PORT=5433 en .env
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # La imagen oficial ejecuta los scripts de esta carpeta SOLO la primera vez
+      # (con el volumen de datos vacío): aplica 001..008 y asigna contraseñas.
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+      - ./db/scripts:/scripts:ro
+      - ./tests:/tests:ro
+      # Desde PostgreSQL 18 la imagen guarda los datos en /var/lib/postgresql/18/docker:
+      # el volumen se monta en /var/lib/postgresql (no en .../data).
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bodegas_atuel"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Carga masiva. No arranca con "docker compose up": se ejecuta a pedido con
+  #   docker compose --profile seed run --rm seed
+  seed:
+    profiles: ["seed"]
+    build: ./db/seed
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: bodegas_atuel
+      PGUSER: propietario
+      PGPASSWORD: ${PG_PROPIETARIO_PASSWORD}
+      PYTHONUNBUFFERED: "1"
+    # Argumentos extra, p. ej.:  docker compose --profile seed run --rm seed --fecha-ref 2026-12-01
+    # (el comando python seed_db.py está definido en db/seed/Dockerfile)
+
+volumes:
+  pgdata:

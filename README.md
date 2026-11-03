@@ -77,7 +77,23 @@ El [informe](docs/informe_etapa4.md) también incluye:
 
 ---
 
-## Cómo verificarlo (5 minutos)
+## Cómo levantarlo con Docker (recomendado)
+
+Requisito: Docker Desktop. Desde la raíz del repositorio:
+
+```powershell
+copy .env.example .env        # y completar las 4 contraseñas (PGPASSWORD y las de los 3 roles)
+docker compose up -d          # crea la base y aplica las migraciones 001 a 008 (solo la primera vez)
+docker compose logs db        # tiene que aparecer "Base lista: 30 tablas"
+docker compose --profile seed run --rm seed                                  # carga masiva (~1 minuto)
+docker compose exec db psql -U postgres -d bodegas_atuel -f /tests/db_tests.sql   # TOTAL: 92 casos · 92 OK
+```
+
+- La base queda en `localhost:5432` (o en el puerto de `DB_PORT`), y se puede abrir con pgAdmin o DBeaver.
+- Para empezar de cero: `docker compose down -v` borra el contenedor **y los datos**. Las migraciones solo se aplican cuando el volumen está vacío.
+- Las migraciones se aplican con `docker/db/init/01_migraciones.sh`, que es el mismo orden que la instalación manual.
+
+## Cómo verificarlo sin Docker (5 minutos)
 
 Requisitos: PostgreSQL 14+ y Python 3.10+. Desde la raíz del repositorio, en PowerShell:
 
@@ -117,7 +133,7 @@ psql -U postgres -c "CREATE ROLE propietario LOGIN" -c "CREATE ROLE app_rw LOGIN
 | Etapa | Plan |
 |---|---|
 | **5. Consultas SQL** | Resolver U1–U6, I1–I6, D1–D6 y S1–S12 en `consultas/`. Cada sentencia que modifica datos se prueba en una transacción (estado antes → sentencia → estado después → `ROLLBACK`). Las consultas avanzadas usan CTE, funciones de ventana y `NOT EXISTS`. El dataset ya tiene datos para todas las consignas. |
-| **6. API REST** | Propuesta: **Python + FastAPI + psycopg** con pool de conexiones, una capa de acceso a datos con SQL parametrizado y conexión con el rol `app_rw`. Los errores de PostgreSQL se traducen a HTTP por SQLSTATE (`P0001` → 409, `23514` → 422; `23001`/`23503` → 409 para RN-14). Además: OpenAPI automático, 8 o más pruebas automáticas y `docker compose up`. |
+| **6. API REST** | Propuesta: **Python + FastAPI + psycopg2** con pool de conexiones, una capa de acceso a datos con SQL parametrizado y conexión con el rol `app_rw`. Los errores de PostgreSQL se traducen a HTTP por SQLSTATE (`P0001` → 409, `23514` → 422; `23001`/`23503` → 409 para RN-14). Además: OpenAPI automático, 8 o más pruebas automáticas y un servicio más en `docker-compose.yml`. |
 | **7. Front** | HTML/JS simple que consume solo la API: catálogo, alta de vino con composición, nueva venta, transferencias y tablero. |
 | **8. Nube** | Comparar Neon, Supabase y Render. Requisitos: HTTPS, `sslmode=require`, acceso restringido, secretos en el proveedor, y backup y restauración probados. |
 | **9. Defensa** | Informe final, README completo y demo en vivo. |
@@ -139,6 +155,8 @@ psql -U postgres -c "CREATE ROLE propietario LOGIN" -c "CREATE ROLE app_rw LOGIN
 ## Estructura
 
 ```
+docker-compose.yml   base de datos (y, en las próximas etapas, API y front)
+docker/db/init/      script que aplica las migraciones al crear el contenedor
 db/
   migrations/   001_esquema … 008_indices (se aplican en orden)
   scripts/      asignar_passwords.sql, medir_indices.py

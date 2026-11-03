@@ -1,0 +1,4 @@
+# Los scripts que se ejecutan dentro de contenedores Linux deben tener fin de
+# línea LF aunque el repo se clone en Windows (con CRLF, bash falla con "\r").
+*.sh        text eol=lf
+Dockerfile  text eol=lf
