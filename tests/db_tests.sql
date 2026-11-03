@@ -15,6 +15,9 @@
 --        23502 not_null_violation      23503 foreign_key_violation
 --        23505 unique_violation        23514 check_violation (CHECK y DOMAIN)
 --        P0001 raise_exception (trigger/procedimiento)   42501 sin privilegio
+--        23001 restrict_violation (ON DELETE RESTRICT desde PostgreSQL 18;
+--              las versiones 14 a 17 informan 23503)
+--     Si un caso admite más de un SQLSTATE se escriben separados por '|'.
 --     El caso pasa solo si se produce ESE error. Si la sentencia no falla,
 --     se fuerza un error 'ZZ001' que revierte lo que haya hecho y el caso
 --     se registra como FALLO. (La versión anterior capturaba con
@@ -69,7 +72,8 @@ BEGIN
     END;
     SET CONSTRAINTS ALL DEFERRED;   -- por si el caso las puso IMMEDIATE
     INSERT INTO resultado (regla, caso, esperado, ok, detalle)
-    VALUES (p_regla, p_caso, 'falla ' || p_sqlstate, v_state = p_sqlstate, v_state || ': ' || v_msg);
+    VALUES (p_regla, p_caso, 'falla ' || p_sqlstate,
+            v_state = ANY (string_to_array(p_sqlstate, '|')), v_state || ': ' || v_msg);
 END;
 $$;
 
@@ -520,12 +524,14 @@ END $$;
 -- RN-14  No se puede borrar un transportista, una bodega ni un vino que
 --        tengan movimientos asociados.
 -- Mecanismo: FK con ON DELETE RESTRICT.
+-- PostgreSQL 18 informa estas violaciones con SQLSTATE 23001
+-- (restrict_violation); las versiones anteriores, con 23503. Se aceptan ambos.
 -- ---------------------------------------------------------------------
-CALL pg_temp.debe_fallar('RN-14', 'Borrar un vino con ventas', '23503',
+CALL pg_temp.debe_fallar('RN-14', 'Borrar un vino con ventas', '23001|23503',
     $q$DELETE FROM vino WHERE cod_vino = pg_temp.id('vino')$q$);
-CALL pg_temp.debe_fallar('RN-14', 'Borrar una bodega que elabora vinos', '23503',
+CALL pg_temp.debe_fallar('RN-14', 'Borrar una bodega que elabora vinos', '23001|23503',
     $q$DELETE FROM bodega WHERE cuit = '33999999001'$q$);
-CALL pg_temp.debe_fallar('RN-14', 'Borrar un transportista con ingresos', '23503',
+CALL pg_temp.debe_fallar('RN-14', 'Borrar un transportista con ingresos', '23001|23503',
     $q$INSERT INTO ingreso (id_transportista, cuit_bodega) VALUES (pg_temp.id('transportista'), '33999999001')$q$,
     $q$DELETE FROM transportista WHERE id_transportista = pg_temp.id('transportista')$q$);
 CALL pg_temp.debe_funcionar('RN-14', 'Borrar una bodega sin movimientos',
