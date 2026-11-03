@@ -119,7 +119,8 @@ def resumen_plan(plan: dict) -> dict:
             leidas += filas
     top = plan["Plan"]
     triggers = [(t.get("Constraint Name", t["Trigger Name"]), t.get("Relation", ""), t["Time"]) for t in plan.get("Triggers", [])]
-    return dict(tiempo=plan["Execution Time"], recorridos=recorridos, filas_leidas=leidas, triggers=triggers,
+    # PostgreSQL 18 informa Actual Rows con decimales (promedio por iteración): se redondea.
+    return dict(tiempo=plan["Execution Time"], recorridos=recorridos, filas_leidas=round(leidas), triggers=triggers,
                 buffers=top.get("Shared Hit Blocks", 0) + top.get("Shared Read Blocks", 0))
 
 
@@ -313,7 +314,7 @@ def main() -> int:
         scan = [n for n in nodos(plan["Plan"]) if n["Node Type"] in ("Bitmap Index Scan", "Index Scan",
                                                                      "Index Only Scan", "Seq Scan")][0]
         return dict(nodo=scan["Node Type"] + (f" ({scan['Index Name']})" if "Index Name" in scan else ""),
-                    estimadas=scan["Plan Rows"], reales=scan["Actual Rows"])
+                    estimadas=round(scan["Plan Rows"]), reales=round(scan["Actual Rows"]))
     exp["stale_sin"] = medir(cur, sql_stale)
     exp["stale_sin_est"] = estimacion()
     cur.execute("ANALYZE comprobante")
