@@ -8,7 +8,8 @@
 *.gz
 *.sql.gz
 
-# Archivos del sistema y de VS Code
+# Archivos del sistema, de VS Code y temporales de Office (Word crea ~$archivo.docx mientras está abierto)
+~$*
 .vscode/
 Thumbs.db
 Desktop.ini
