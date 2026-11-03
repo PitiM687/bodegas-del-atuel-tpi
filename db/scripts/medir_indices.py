@@ -174,6 +174,10 @@ def main() -> int:
     conn = psycopg2.connect()
     conn.autocommit = True
     cur = conn.cursor()
+    # Si otra sesión tiene bloqueada una tabla (p. ej. pgAdmin o DBeaver con una
+    # transacción abierta), DROP/CREATE INDEX esperaría indefinidamente: mejor
+    # fallar a los 15 s con un mensaje claro.
+    cur.execute("SET lock_timeout = '15s'")
     cur.execute("SELECT version(), current_user, current_setting('server_version')")
     version, usuario, ver_corta = cur.fetchone()
     print(f"{version}\nUsuario: {usuario}\n")
@@ -460,4 +464,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except psycopg2.errors.LockNotAvailable:
+        print("\nERROR: otra conexión tiene bloqueada una tabla y no se pudo crear o borrar un índice.\n"
+              "Cerrá pgAdmin, DBeaver o cualquier cliente con una transacción abierta sobre bodegas_atuel\n"
+              "(o ejecutá COMMIT/ROLLBACK en esa sesión) y volvé a correr el script.\n"
+              "Para ver quién bloquea:  SELECT pid, usename, application_name, state, query\n"
+              "                         FROM pg_stat_activity WHERE datname = 'bodegas_atuel';", file=sys.stderr)
+        sys.exit(2)
